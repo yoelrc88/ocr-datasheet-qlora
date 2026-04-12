@@ -1,0 +1,11 @@
+platform=Google Colab runtime
+run_name=run_002
+gpu=T4
+use_drive=False
+use_mock_data=True
+
+Observed notebook outputs:
+- package install cell upgraded multiple packages in-place
+- pip warned that previously imported `PIL` requires a runtime restart to use the new version
+- dependency output showed `torch 2.10.0+cpu`
+- git clone to `/content/ocr-datasheet-qlora` failed with exit status 128

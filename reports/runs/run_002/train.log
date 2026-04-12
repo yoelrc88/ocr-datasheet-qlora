@@ -1,0 +1,10 @@
+[setup]
+Dependency installation upgraded transformers, trl, bitsandbytes, datasets, pillow, scikit-learn, beautifulsoup4, and qwen-vl-utils.
+
+[important signals]
+- pip warned that imported package `PIL` requires a runtime restart
+- dependency output showed torch version `2.10.0+cpu`
+- clone step failed before data generation or training started
+
+[failure]
+CalledProcessError: Command '['git', 'clone', 'https://github.com/yoelrc88/ocr-datasheet-qlora.git', '/content/ocr-datasheet-qlora']' returned non-zero exit status 128.

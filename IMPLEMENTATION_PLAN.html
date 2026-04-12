@@ -281,6 +281,7 @@
         <li>let the notebook clone the repo from GitHub</li>
         <li>let the notebook generate mock data locally in Colab</li>
       </ul>
+      <p class="muted">If the repo is private, GitHub clone mode needs a token or a switch back to <code>USE_DRIVE = True</code>.</p>
       <h3>What Counts As Success</h3>
       <ul>
         <li>the notebook finds <code>PROJECT_DIR</code></li>
@@ -313,6 +314,15 @@
       </ul>
       <h3>Important Limitation</h3>
       <p>Synthetic tables can teach structure, but they will not fully cover real datasheet rendering artifacts by themselves. The strongest setup is usually synthetic data for structure coverage plus a smaller set of real cropped tables for realism.</p>
+    </section>
+
+    <section class="section">
+      <h2>Recent Findings</h2>
+      <ul>
+        <li>`run_001`: Drive path was missing, so training never started.</li>
+        <li>`run_002`: no-Drive mode surfaced two notebook issues: package upgrades forced a restart condition, and GitHub clone failed with exit code <code>128</code>.</li>
+        <li>The notebook now includes an early CUDA check and better private-repo clone guidance.</li>
+      </ul>
     </section>
 
     <section class="section">

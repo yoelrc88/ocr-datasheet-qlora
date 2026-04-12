@@ -43,15 +43,41 @@ def build_notebook() -> dict:
             "- what arrangement you are testing\n"
             "- what happened in past runs"
         ),
-        md_cell("## 1. Install dependencies"),
+        md_cell("## 1. Install dependencies\n\nThis cell installs only the missing packages we need for the smoke test. It avoids blanket upgrades because those can force a runtime restart and can pull in incompatible versions."),
         code_cell(
-            "!pip install -U transformers trl peft bitsandbytes accelerate datasets pillow scikit-learn beautifulsoup4 qwen-vl-utils"
+            "import importlib.util\n"
+            "import subprocess\n"
+            "import sys\n\n"
+            "required = {\n"
+            "    'trl': 'trl==1.1.0',\n"
+            "    'bitsandbytes': 'bitsandbytes==0.49.2',\n"
+            "    'qwen_vl_utils': 'qwen-vl-utils==0.0.14',\n"
+            "}\n"
+            "missing = [spec for module, spec in required.items() if importlib.util.find_spec(module) is None]\n"
+            "if missing:\n"
+            "    print('Installing missing packages:', missing)\n"
+            "    subprocess.check_call([sys.executable, '-m', 'pip', 'install', *missing])\n"
+            "else:\n"
+            "    print('Required packages already present; skipping pip install.')"
         ),
-        md_cell("## 2. Configure workflow mode\n\nUse `USE_DRIVE = False` for the cheapest smoke test path. That mode clones the repo from GitHub and can generate mock data directly in Colab."),
+        md_cell("## 2. Validate runtime\n\nFail early if this Colab session is not actually using CUDA-backed PyTorch."),
+        code_cell(
+            "import torch\n\n"
+            "print('torch version:', torch.__version__)\n"
+            "print('cuda available:', torch.cuda.is_available())\n"
+            "print('torch cuda:', torch.version.cuda)\n\n"
+            "if '+cpu' in torch.__version__ or not torch.cuda.is_available():\n"
+            "    raise RuntimeError(\n"
+            "        'This runtime is not GPU-ready for QLoRA. Restart the runtime once after installs, '\n"
+            "        'make sure GPU is enabled, and rerun from the top.'\n"
+            "    )"
+        ),
+        md_cell("## 3. Configure workflow mode\n\nUse `USE_DRIVE = False` for the cheapest smoke test path. That mode clones the repo from GitHub and can generate mock data directly in Colab."),
         code_cell(
             "USE_DRIVE = False\n"
             "USE_MOCK_DATA = True\n"
             "REPO_URL = 'https://github.com/yoelrc88/ocr-datasheet-qlora.git'\n"
+            "GITHUB_TOKEN = ''  # optional for private repos\n"
             "DRIVE_PROJECT_DIR = '/content/drive/MyDrive/finetune-test'\n"
             "GITHUB_PROJECT_DIR = '/content/ocr-datasheet-qlora'\n"
             "RUN_NAME = 'run_001'\n"
@@ -63,7 +89,7 @@ def build_notebook() -> dict:
             "GRAD_ACCUM = 8\n"
             "LEARNING_RATE = 1e-4"
         ),
-        md_cell("## 3. Optional: mount Google Drive\n\nRun this only if `USE_DRIVE = True`. Skip it for GitHub-only smoke tests."),
+        md_cell("## 4. Optional: mount Google Drive\n\nRun this only if `USE_DRIVE = True`. Skip it for GitHub-only smoke tests."),
         code_cell(
             "if USE_DRIVE:\n"
             "    from google.colab import drive\n"
@@ -71,7 +97,7 @@ def build_notebook() -> dict:
             "else:\n"
             "    print('Skipping Drive mount; using GitHub/local mode.')"
         ),
-        md_cell("## 4. Prepare the repo and dataset source"),
+        md_cell("## 5. Prepare the repo and dataset source\n\nIf the repo is private, set `GITHUB_TOKEN` above or use Drive mode. The error message here will include clone stderr so the failure is visible in the notebook."),
         code_cell(
             "import os\n"
             "import platform\n"
@@ -82,8 +108,16 @@ def build_notebook() -> dict:
             "else:\n"
             "    PROJECT_DIR = GITHUB_PROJECT_DIR\n\n"
             "if not USE_DRIVE:\n"
+            "    clone_url = REPO_URL\n"
+            "    if GITHUB_TOKEN and REPO_URL.startswith('https://'):\n"
+            "        clone_url = REPO_URL.replace('https://', f'https://{GITHUB_TOKEN}@', 1)\n"
             "    subprocess.run(['rm', '-rf', GITHUB_PROJECT_DIR], check=False)\n"
-            "    subprocess.run(['git', 'clone', REPO_URL, GITHUB_PROJECT_DIR], check=True)\n"
+            "    clone = subprocess.run(['git', 'clone', clone_url, GITHUB_PROJECT_DIR], capture_output=True, text=True)\n"
+            "    if clone.returncode != 0:\n"
+            "        raise RuntimeError(\n"
+            "            'Git clone failed. If the repo is private, set GITHUB_TOKEN or switch to USE_DRIVE=True. '\n"
+            "            f'STDERR: {clone.stderr.strip()}'\n"
+            "        )\n"
             "    print(f'Cloned repo into {GITHUB_PROJECT_DIR}')\n\n"
             "if USE_MOCK_DATA:\n"
             "    subprocess.run(['python', f'{PROJECT_DIR}/scripts/generate_mock_smoke_test_data.py'], check=True)\n"
@@ -112,7 +146,7 @@ def build_notebook() -> dict:
             "Path(f'{REPORT_DIR}/runtime_info.txt').write_text('\\n'.join(runtime_info), encoding='utf-8')\n"
             "print(Path(f'{REPORT_DIR}/runtime_info.txt').read_text(encoding='utf-8'))"
         ),
-        md_cell("## 5. Copy repo to local runtime for faster work\n\nThis keeps training and temp files off Drive while still writing the report folder back into the repo or cloned checkout."),
+        md_cell("## 6. Copy repo to local runtime for faster work\n\nThis keeps training and temp files off Drive while still writing the report folder back into the repo or cloned checkout."),
         code_cell(
             "!rm -rf \"$LOCAL_WORKDIR\"\n"
             "!cp -R \"$PROJECT_DIR\" \"$LOCAL_WORKDIR\"\n"
@@ -121,7 +155,7 @@ def build_notebook() -> dict:
             "print('LOCAL_PROJECT_DIR =', LOCAL_PROJECT_DIR)\n"
             "print('LOCAL_DATA_JSONL =', LOCAL_DATA_JSONL)"
         ),
-        md_cell("## 6. Run the smoke-test training job and capture the log"),
+        md_cell("## 7. Run the smoke-test training job and capture the log"),
         code_cell(
             "train_cmd = [\n"
             "    'python',\n"
@@ -143,7 +177,7 @@ def build_notebook() -> dict:
             "    print(result.stderr[-4000:])\n"
             "    raise RuntimeError(f'Training failed with return code {result.returncode}')"
         ),
-        md_cell("## 7. Copy lightweight outputs into the repo report folder"),
+        md_cell("## 8. Copy lightweight outputs into the repo report folder"),
         code_cell(
             "lightweight_files = [\n"
             "    'run_config.json',\n"
@@ -195,10 +229,10 @@ def build_notebook() -> dict:
             "print('Artifact manifest:')\n"
             "print(Path(f'{REPORT_DIR}/artifact_manifest.txt').read_text(encoding='utf-8'))"
         ),
-        md_cell("## 8. Review the report files that should be committed"),
+        md_cell("## 9. Review the report files that should be committed"),
         code_cell("!ls -la \"$REPORT_DIR\""),
         md_cell(
-            "## 9. GitHub handoff\n\n"
+            "## 10. GitHub handoff\n\n"
             "After the run:\n\n"
             "1. Update `notes.md` in the run folder with the latest status and a short comparison to past runs\n"
             "2. If you changed the experiment strategy, update `reports/EXPERIMENT_MATRIX.md`\n"
