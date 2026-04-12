@@ -216,6 +216,106 @@
     </section>
 
     <section class="section">
+      <h2>How Drive Works</h2>
+      <p>The notebook does not pull data from GitHub automatically. It expects your repo and your dataset to exist inside mounted Google Drive, then it copies the repo into Colab's local disk for faster execution.</p>
+      <p><strong>Drive is optional now.</strong> For smoke tests, you can skip Drive entirely: the notebook can clone the repo from GitHub into Colab and generate mock data locally.</p>
+      <h3>Expected Drive Layout</h3>
+      <ul>
+        <li><code>/content/drive/MyDrive/finetune-test</code> as the repo root inside Drive</li>
+        <li><code>/content/drive/MyDrive/finetune-test/scripts/</code> for the training scripts</li>
+        <li><code>/content/drive/MyDrive/finetune-test/examples/</code> for example dataset files</li>
+        <li><code>/content/drive/MyDrive/finetune-test/reports/</code> for lightweight run outputs that you will commit back to GitHub</li>
+      </ul>
+      <h3>What The Notebook Reads</h3>
+      <ul>
+        <li><code>PROJECT_DIR</code>: the repo folder in Drive</li>
+        <li><code>DATA_JSONL</code>: the labeled dataset manifest</li>
+        <li>each JSONL row must point to a real image path available from the Colab runtime</li>
+      </ul>
+      <p class="muted">In GitHub-only mode, <code>PROJECT_DIR</code> is the cloned repo under <code>/content/ocr-datasheet-qlora</code> instead of a Drive path.</p>
+      <h3>What The Notebook Writes</h3>
+      <ul>
+        <li>temporary training artifacts into Colab local disk under <code>/content/artifacts/&lt;run_name&gt;</code></li>
+        <li>lightweight reports into Drive under <code>reports/runs/&lt;run_name&gt;</code></li>
+      </ul>
+      <p class="muted">That split is intentional: local disk is faster for training, Drive is used for durable small files that are safe to push back to GitHub.</p>
+    </section>
+
+    <section class="section">
+      <h2>What Data Colab Expects</h2>
+      <p>The training script expects a JSONL dataset where each row contains an image path and a gold output. For the current starter path, the gold output is <code>HTML</code>.</p>
+      <h3>Minimum Row Shape</h3>
+      <ul>
+        <li><code>id</code></li>
+        <li><code>doc_id</code></li>
+        <li><code>image</code>: absolute path to an image file visible in Colab</li>
+        <li><code>html</code>: the gold table HTML</li>
+        <li><code>notes</code>: optional comments</li>
+      </ul>
+      <h3>Important Detail</h3>
+      <p>The script validates that every image path exists before training starts. If the repo path or image paths are wrong, the run will fail before the GPU does useful work.</p>
+    </section>
+
+    <section class="section">
+      <h2>Cheap Smoke Test</h2>
+      <p>You do not need a full real dataset just to prove the notebook works. The fastest smoke test is to create a tiny mocked dataset and verify that the pipeline can read files, stage the repo, start validation, and either begin training or fail for a clearly model-specific reason.</p>
+      <h3>Best Smoke-Test Goal</h3>
+      <ul>
+        <li>prove Drive paths are correct</li>
+        <li>prove the JSONL is readable</li>
+        <li>prove the image paths resolve</li>
+        <li>prove the training script starts from Colab</li>
+      </ul>
+      <h3>Recommended Mock Setup</h3>
+      <ul>
+        <li>use <code>2-4</code> tiny PNG images</li>
+        <li>use very small fake table labels in valid <code>HTML</code></li>
+        <li>set <code>MAX_SAMPLES</code> to a tiny number</li>
+        <li>run only a smoke-test configuration first</li>
+        <li>use <code>scripts/generate_mock_smoke_test_data.py</code> to generate a starter mocked dataset in the repo</li>
+      </ul>
+      <h3>Cheapest Colab Path</h3>
+      <ul>
+        <li>set <code>USE_DRIVE = False</code></li>
+        <li>set <code>USE_MOCK_DATA = True</code></li>
+        <li>let the notebook clone the repo from GitHub</li>
+        <li>let the notebook generate mock data locally in Colab</li>
+      </ul>
+      <h3>What Counts As Success</h3>
+      <ul>
+        <li>the notebook finds <code>PROJECT_DIR</code></li>
+        <li>the notebook copies the repo into <code>/content/finetune-test</code></li>
+        <li>the script writes <code>run_config.json</code> and <code>dataset_split_summary.json</code></li>
+        <li>the run produces a report folder under <code>reports/runs/&lt;run_name&gt;</code></li>
+      </ul>
+      <p class="muted">For a pure infrastructure smoke test, you do not care yet whether the model learns anything useful.</p>
+    </section>
+
+    <section class="section">
+      <h2>Synthetic Data</h2>
+      <p>The mock smoke-test data is only for plumbing. Synthetic data is different: it can be useful for actual training if you generate the exact structure failures you want the model to learn, such as merged headers and merged body cells.</p>
+      <h3>What We Can Generate Well</h3>
+      <ul>
+        <li>header cells with <code>rowspan</code> and <code>colspan</code></li>
+        <li>body cells merged across rows or columns</li>
+        <li>small changes in cell width, row height, and padding</li>
+        <li>slight shifts in text position and layout proportions</li>
+        <li>repeated table families with controlled variation</li>
+      </ul>
+      <h3>Why It Is Interesting</h3>
+      <p>For your use case, synthetic generation is a strong fit because the target skill is structural table recognition, not open-ended world knowledge. If the model keeps failing on merged-cell layouts, we can manufacture many clean examples of those layouts cheaply.</p>
+      <h3>Current Starter Generator</h3>
+      <ul>
+        <li><code>scripts/generate_synthetic_merged_table_data.py</code></li>
+        <li>outputs paired PNG images and gold <code>HTML</code> labels</li>
+        <li>randomizes widths, heights, text content, and merged-cell patterns</li>
+        <li>intended to run in Colab, not to commit generated images into git</li>
+      </ul>
+      <h3>Important Limitation</h3>
+      <p>Synthetic tables can teach structure, but they will not fully cover real datasheet rendering artifacts by themselves. The strongest setup is usually synthetic data for structure coverage plus a smaller set of real cropped tables for realism.</p>
+    </section>
+
+    <section class="section">
       <h2>Constraints</h2>
       <ul>
         <li>Use <code>allenai/olmOCR-2-7B-1025</code> <code>BF16</code> as the fine-tuning base.</li>

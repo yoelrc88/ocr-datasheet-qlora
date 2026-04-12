@@ -36,6 +36,7 @@ def build_notebook() -> dict:
             "3. Commit and push those report files to GitHub\n"
             "4. I can review the run directly from GitHub\n\n"
             "Heavy artifacts like checkpoints should stay outside git.\n\n"
+            "Google Drive is optional. For cheap smoke tests, the notebook can clone the repo from GitHub and generate mock data directly inside Colab.\n\n"
             "At the beginning of each run, keep a note about:\n\n"
             "- where you are running it\n"
             "- what the latest run is\n"
@@ -46,15 +47,14 @@ def build_notebook() -> dict:
         code_cell(
             "!pip install -U transformers trl peft bitsandbytes accelerate datasets pillow scikit-learn beautifulsoup4 qwen-vl-utils"
         ),
-        md_cell("## 2. Mount Google Drive"),
-        code_cell("from google.colab import drive\ndrive.mount('/content/drive')"),
-        md_cell("## 3. Configure paths and run name\n\nUpdate these values to match your Drive layout and experiment name."),
+        md_cell("## 2. Configure workflow mode\n\nUse `USE_DRIVE = False` for the cheapest smoke test path. That mode clones the repo from GitHub and can generate mock data directly in Colab."),
         code_cell(
-            "PROJECT_DIR = '/content/drive/MyDrive/finetune-test'\n"
-            "DATA_JSONL = f'{PROJECT_DIR}/examples/table_html_dataset.example.jsonl'\n"
+            "USE_DRIVE = False\n"
+            "USE_MOCK_DATA = True\n"
+            "REPO_URL = 'https://github.com/yoelrc88/ocr-datasheet-qlora.git'\n"
+            "DRIVE_PROJECT_DIR = '/content/drive/MyDrive/finetune-test'\n"
+            "GITHUB_PROJECT_DIR = '/content/ocr-datasheet-qlora'\n"
             "RUN_NAME = 'run_001'\n"
-            "REPORTS_DIR = f'{PROJECT_DIR}/reports/runs'\n"
-            "REPORT_DIR = f'{REPORTS_DIR}/{RUN_NAME}'\n"
             "LOCAL_WORKDIR = '/content/finetune-test'\n"
             "ARTIFACT_DIR = f'/content/artifacts/{RUN_NAME}'\n"
             "MAX_SAMPLES = 0\n"
@@ -63,18 +63,43 @@ def build_notebook() -> dict:
             "GRAD_ACCUM = 8\n"
             "LEARNING_RATE = 1e-4"
         ),
-        md_cell("## 4. Inspect runtime and prepare report directory"),
+        md_cell("## 3. Optional: mount Google Drive\n\nRun this only if `USE_DRIVE = True`. Skip it for GitHub-only smoke tests."),
+        code_cell(
+            "if USE_DRIVE:\n"
+            "    from google.colab import drive\n"
+            "    drive.mount('/content/drive')\n"
+            "else:\n"
+            "    print('Skipping Drive mount; using GitHub/local mode.')"
+        ),
+        md_cell("## 4. Prepare the repo and dataset source"),
         code_cell(
             "import os\n"
             "import platform\n"
             "import subprocess\n"
             "from pathlib import Path\n\n"
+            "if USE_DRIVE:\n"
+            "    PROJECT_DIR = DRIVE_PROJECT_DIR\n"
+            "else:\n"
+            "    PROJECT_DIR = GITHUB_PROJECT_DIR\n\n"
+            "if not USE_DRIVE:\n"
+            "    subprocess.run(['rm', '-rf', GITHUB_PROJECT_DIR], check=False)\n"
+            "    subprocess.run(['git', 'clone', REPO_URL, GITHUB_PROJECT_DIR], check=True)\n"
+            "    print(f'Cloned repo into {GITHUB_PROJECT_DIR}')\n\n"
+            "if USE_MOCK_DATA:\n"
+            "    subprocess.run(['python', f'{PROJECT_DIR}/scripts/generate_mock_smoke_test_data.py'], check=True)\n"
+            "    DATA_JSONL = f'{PROJECT_DIR}/mock_smoke_test/mock_table_html.jsonl'\n"
+            "else:\n"
+            "    DATA_JSONL = f'{PROJECT_DIR}/examples/table_html_dataset.example.jsonl'\n\n"
+            "REPORTS_DIR = f'{PROJECT_DIR}/reports/runs'\n"
+            "REPORT_DIR = f'{REPORTS_DIR}/{RUN_NAME}'\n"
             "Path(REPORT_DIR).mkdir(parents=True, exist_ok=True)\n"
             "Path(ARTIFACT_DIR).mkdir(parents=True, exist_ok=True)\n\n"
             "gpu_info = subprocess.run(['nvidia-smi'], capture_output=True, text=True)\n"
             "runtime_info = [\n"
             "    f'platform={platform.platform()}',\n"
             "    f'python={platform.python_version()}',\n"
+            "    f'use_drive={USE_DRIVE}',\n"
+            "    f'use_mock_data={USE_MOCK_DATA}',\n"
             "    f'project_dir={PROJECT_DIR}',\n"
             "    f'data_jsonl={DATA_JSONL}',\n"
             "    f'run_name={RUN_NAME}',\n"
@@ -87,7 +112,7 @@ def build_notebook() -> dict:
             "Path(f'{REPORT_DIR}/runtime_info.txt').write_text('\\n'.join(runtime_info), encoding='utf-8')\n"
             "print(Path(f'{REPORT_DIR}/runtime_info.txt').read_text(encoding='utf-8'))"
         ),
-        md_cell("## 5. Copy repo to local runtime for faster work\n\nThis keeps training and temp files off Drive while still writing the report folder back into the repo."),
+        md_cell("## 5. Copy repo to local runtime for faster work\n\nThis keeps training and temp files off Drive while still writing the report folder back into the repo or cloned checkout."),
         code_cell(
             "!rm -rf \"$LOCAL_WORKDIR\"\n"
             "!cp -R \"$PROJECT_DIR\" \"$LOCAL_WORKDIR\"\n"

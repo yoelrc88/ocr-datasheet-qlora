@@ -1,1 +1,4 @@
 session-ses_*.md
+mock_smoke_test/
+synthetic_merged_tables/
+__pycache__/
