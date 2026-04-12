@@ -1,0 +1,774 @@
+wonder what the stesp be for finetunning something like olmOCR-2 7B Q8 for specific stuff like datasheet and tables specifically using an 12GB ram Nviia GPU like a low end RTX A2000 lets say I have the data (not sure if in the 100s its ok or need more) . I know sites like Unsloth have a lot around this.
+
+
+Hey what’s up
+April 10 2026:
+Yes, this is possible-ish on a 12 GB RTX A2000, but only if you do it the lean way. olmOCR-2-7B-1025 is already a Qwen2.5-VL-7B-Instruct derivative that AllenAI further tuned with GRPO to improve math, tables, and other tricky OCR cases. AllenAI’s own card says the BF16 release is the one to use for further fine-tuning, while the FP8 release is what they recommend for practical deployment. 
+So I would not fine-tune a Q8 inference artifact directly. Treat Q8 as a deployment format. The normal path is: start from the original checkpoint, load it quantized for training with 4-bit NF4 / QLoRA, train only adapters, then export and re-quantize afterward. That is the same pattern shown in Hugging Face’s VLM fine-tuning recipe. 
+The catch is VRAM. Hugging Face describes 7B VLM fine-tuning as resource-intensive and uses an A100 in its cookbook example. On a 12 GB card, the realistic setup is batch size 1, aggressive memory saving, shorter sequences, smaller images, and probably not fine-tuning every module. Unsloth explicitly recommends dropping batch size to 1 or reducing sequence length when you OOM, and it lets you fine-tune only selected parts such as the vision layers, language layers, or attention / MLP layers. It also recommends keeping training images around 300–1000 px to avoid wasting memory. 
+What I’d actually do
+Do a baseline first.
+
+ Run stock olmOCR-2 on your datasheets before touching training. The model expects a single document image with longest dimension around 1288 px, and the prompt includes extra page metadata that the olmOCR toolkit prepares for you. Keep that pipeline intact, because if you change rendering/prompting too much, you are no longer fine-tuning the same task. 
+
+
+Make the dataset brutally specific.
+
+ Don’t aim for “better OCR in general.” Aim for things like:
+
+
+regulator tables
+
+
+pinout tables
+
+
+electrical characteristics tables
+
+
+multi-column pages
+
+
+footnotes/superscripts
+
+
+rotated tables
+
+
+weird vendor fonts
+
+
+My take: 200–500 very clean pages can move the needle for a narrow datasheet format. It is not enough to build a better universal OCR model. Quality crushes quantity here.
+
+
+Use SFT first, not RL.
+
+ Start with plain supervised fine-tuning:
+
+
+input: page image + the same toolkit-style metadata/prompt
+
+
+target: your preferred output format
+
+ usually clean markdown or strict JSON for tables
+
+
+RL/GRPO is where people light weekends on fire.
+
+
+On 12 GB, fine-tune less, not more.
+
+ First attempt:
+
+
+QLoRA 4-bit NF4
+
+
+LoRA only
+
+
+batch size 1
+
+
+gradient accumulation
+
+
+gradient checkpointing
+
+
+start by tuning language / attention / MLP, and leave most of vision alone
+
+
+That is the sane path. Full fine-tuning on that GPU is fantasy cosplay.
+
+
+Keep images smaller during training.
+
+ For OCR/table adaptation on your card, I’d start around 768–1024 px longest side for training experiments, even though the full pipeline may render larger. You need to survive training first. Then test whether that hurts table fidelity too much.
+
+
+Evaluate by failure bucket, not average vibe.
+
+ Track:
+
+
+table cell accuracy
+
+
+merged/split row errors
+
+
+unit/decimal/sign mistakes
+
+
+header/footer leakage
+
+
+reading order errors
+
+
+markdown/JSON validity
+
+
+The real gotcha
+For datasheets and tables, the biggest gains often come from better page handling, not just more fine-tuning:
+crop/zoom table regions,
+
+
+maybe detect tables first,
+
+
+then normalize output into JSON/CSV.
+
+
+Fine-tuning alone will not rescue a page that was rendered badly or a table that needs crop-level attention. That’s the part people skip because “train model” sounds cooler.
+My blunt recommendation
+If you only have:
+one 12 GB GPU, and
+
+
+hundreds of examples,
+
+
+then do this:
+start from allenai/olmOCR-2-7B-1025 BF16
+
+
+train with QLoRA
+
+
+keep the olmOCR prompt/render pipeline
+
+
+target a very narrow output format
+
+
+freeze most of vision on the first pass
+
+
+use 200–500 high-value pages
+
+
+measure only on unseen datasheets
+
+
+That is the highest-probability path.
+If you want, I can sketch the exact training stack next — dataset schema, LoRA targets, and a minimal Unsloth-style config for a 12 GB card.
+
+
+For that exact failure mode — complex merged cells in tables — I would not run a big broad fine-tune first. I’d do a small targeted LoRA/QLoRA job on only the nasty cases. That is faster, cheaper, and more likely to move the metric you care about.
+The honest runtime answer
+For a 7B vision-language model in this class, Hugging Face’s own fine-tuning recipe is flagged as resource-intensive and says the Colab example uses an A100. Their consumer-GPU material is for much smaller VLMs like SmolVLM, not 7B document OCR models. 
+Your RTX A2000 desktop card is much smaller than an A100 on both compute and memory bandwidth: the RTX A2000 datasheet shows 8.0 FP32 TFLOPS, 63.9 tensor TFLOPS and 288 GB/s bandwidth, while the A100 80GB PCIe datasheet shows 19.5 FP32 TFLOPS, 312 FP16 tensor TFLOPS and 1,935 GB/s bandwidth. That does not translate linearly into training time, but it is the right reason to expect the A2000 to be a lot slower and much more constrained by batch size, activations, and image size. 
+Rough wall-clock estimates
+These are practical estimates, not guarantees. They assume:
+QLoRA / 4-bit
+
+
+batch size 1
+
+
+gradient checkpointing
+
+
+image longest side around 768–1024 px
+
+
+SFT only, not RL
+
+
+mostly full-page inputs or hard table pages
+
+
+output in a constrained format like markdown or JSON
+
+
+Job size
+RTX A2000 12 GB
+Colab L4 class
+Colab A100 class
+100 hard pages, 2–3 epochs
+2–6 hours
+1–3 hours
+30–90 min
+300 hard pages, 2–3 epochs
+6–15 hours
+2–6 hours
+1–3 hours
+500 hard pages, 2–3 epochs
+10–30 hours
+3–10 hours
+1.5–5 hours
+
+Those ranges are an inference from the hardware gap and the fact that the official 7B VLM recipe expects A100-class compute. The L4 usually lands in the middle because it has 24 GB VRAM and much stronger tensor throughput than your A2000, though still far below A100. NVIDIA lists the L4 at 24 GB, 242 FP16 tensor TFLOPS, and 300 GB/s bandwidth. 
+What makes the runtime blow up
+Three things:
+Full-page training instead of cropped table regions
+
+ If you train on whole datasheet pages, especially tall dense pages, runtime can easily go up 1.5–3× versus targeted table crops. That is because the visual tokens and text output are both heavier. This is consistent with the VLM recipes emphasizing that vision fine-tuning is compute-heavy and with Unsloth/Qwen-VL guidance exposing explicit image-size controls. 
+
+
+Long output targets
+
+ If your answer target is full markdown reconstruction of the page, not just the table JSON/HTML, training slows down. Decoder length matters a lot.
+
+
+RL / GRPO instead of SFT
+
+ Don’t. Hugging Face’s GRPO VLM recipe exists, but it is more expensive than plain SFT. For merged-cell repair, SFT is the sane first move. 
+
+
+What I’d do on your hardware
+For your case, I’d build a dataset like this:
+100–300 pages/crops
+
+
+only failures with:
+
+
+merged headers
+
+
+row/column spans
+
+
+multi-line cells
+
+
+footnotes inside cells
+
+
+blank spacer rows that should not become data rows
+
+
+target output as:
+
+
+HTML table with rowspan/colspan, or
+
+
+strict JSON table schema
+
+
+That is important: if you fine-tune to plain markdown tables, you’re kneecapping yourself, because markdown cannot represent many merged-cell structures cleanly. The model then learns to flatten something that really wants HTML or structured JSON.
+Colab angle
+Current official Colab info says:
+GPU type varies over time
+
+
+paid plans get access to premium GPUs subject to availability
+
+
+free notebooks run for up to 12 hours
+
+
+Pro+ can run up to 24 hours if you have enough compute units
+
+
+current signup page snippet shows Pay As You Go $9.99 for 100 compute units and Pro $9.99/month. 
+
+
+So the real answer is:
+Free Colab / T4: bad fit for this 7B VLM job
+
+
+Colab if you land L4: decent
+
+
+Colab if you land A100: much better
+
+
+Your A2000: usable for a small targeted run, but not for “let’s improve all document OCR” dreams
+
+
+My recommendation
+For merged-cell failures, I would do this in order:
+Make a 150-page hard-set
+
+
+Train on table crops first, not full pages
+
+
+Use HTML table output, not markdown
+
+
+Run 1 epoch smoke test
+
+
+If it helps, extend to 300–500 examples
+
+
+That first smoke test on your A2000 is probably a few hours, not days. A more serious pass is an overnight job. On a good Colab A100, the same experiment is more like lunch-break to half-day.
+My slightly opinionated take: don’t start by fine-tuning the whole page OCR task. That’s the glamorous bad idea. Start by teaching the model to serialize ugly tables correctly. That’s where your error is.
+I can sketch a minimal training recipe next: dataset schema, output format choice, and the exact knobs I’d set for an A2000-safe run.
+
+
+
+
+# Colab starter script for fine-tuning allenai/olmOCR-2-7B-1025
+# on table-to-HTML conversion with ~100 labeled samples.
+#
+# Assumed dataset format:
+# /content/data/table_html_100.jsonl
+# Each line:
+# {
+#   "id": "sample_001",
+#   "doc_id": "TPS25840_Q1",
+#   "image": "/content/data/images/sample_001.png",
+#   "html": "<table>...</table>",
+#   "notes": "merged header with rowspan/colspan"
+# }
+#
+# Recommended: use CROPPED TABLE IMAGES, not full pages, for the first pass.
+# Keep all train/val/test splits GROUPED by doc_id so pages from the same PDF
+# do not leak across splits.
+
+# =========================
+# 0) Install dependencies
+# =========================
+# !pip install -U transformers trl peft bitsandbytes accelerate datasets pillow qwen-vl-utils scikit-learn lxml beautifulsoup4
+
+# Optional if reading from Google Drive
+# from google.colab import drive
+# drive.mount('/content/drive')
+
+import os
+import re
+import json
+import math
+import random
+import textwrap
+from pathlib import Path
+from typing import Dict, List, Any
+
+import torch
+from PIL import Image
+from bs4 import BeautifulSoup
+from datasets import Dataset, DatasetDict
+from sklearn.model_selection import GroupShuffleSplit
+from transformers import (
+    AutoProcessor,
+    BitsAndBytesConfig,
+    Qwen2_5_VLForConditionalGeneration,
+)
+from peft import LoraConfig
+from trl import SFTConfig, SFTTrainer
+from qwen_vl_utils import process_vision_info
+
+# =========================
+# 1) Config
+# =========================
+MODEL_ID = "allenai/olmOCR-2-7B-1025"
+PROCESSOR_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
+DATA_JSONL = "/content/data/table_html_100.jsonl"
+OUTPUT_DIR = "/content/olmocr2-table-html-lora"
+SEED = 42
+MAX_SAMPLES = 100
+USE_BF16 = torch.cuda.is_available() and torch.cuda.get_device_capability(0)[0] >= 8
+
+# First-pass prompt. Keep it narrow and boring.
+SYSTEM_PROMPT = (
+    "You are a document table transcription model. Convert the input table image into valid HTML. "
+    "Preserve table structure exactly, including merged cells with rowspan and colspan. "
+    "Do not summarize. Do not explain. Output HTML only."
+)
+
+USER_PROMPT = (
+    "Convert this table image to HTML. "
+    "Requirements: emit a single <table>...</table>; preserve row/column structure; "
+    "use <thead>/<tbody> when obvious; preserve rowspan/colspan; preserve line breaks inside cells with <br/> if needed; "
+    "do not add commentary."
+)
+
+# Image size policy:
+# For the first pass, keep table crops reasonably small.
+# If your crops are huge, pre-resize them offline to a longest side around 768-1024 px.
+MAX_IMAGE_SIDE_HINT = 1024
+
+# Training knobs for a modest Colab / consumer setup.
+NUM_EPOCHS = 6
+PER_DEVICE_TRAIN_BATCH_SIZE = 1
+PER_DEVICE_EVAL_BATCH_SIZE = 1
+GRAD_ACCUM = 8
+LEARNING_RATE = 1e-4
+SAVE_STEPS = 25
+EVAL_STEPS = 10
+LOGGING_STEPS = 5
+
+# Conservative LoRA first pass.
+# You can expand target_modules later if the adapter is too weak.
+PEFT_R = 8
+PEFT_ALPHA = 16
+PEFT_DROPOUT = 0.05
+TARGET_MODULES = ["q_proj", "v_proj"]
+
+# =========================
+# 2) Reproducibility
+# =========================
+def set_seed(seed: int = 42) -> None:
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+set_seed(SEED)
+
+# =========================
+# 3) HTML normalization
+# =========================
+def normalize_whitespace(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    return text.strip()
+
+
+def normalize_html(html: str) -> str:
+    """
+    Light HTML normalization so labels are consistent.
+    Do NOT over-normalize and destroy structure.
+    """
+    html = normalize_whitespace(html)
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Remove comments
+    for comment in soup.find_all(string=lambda t: isinstance(t, type(soup.comment))):
+        comment.extract()
+
+    # Keep only one top-level table if labels are messy.
+    table = soup.find("table")
+    if table is None:
+        raise ValueError("Label does not contain a <table> element.")
+
+    # Optional cleanup: lowercase tag names are handled by parser output.
+    normalized = str(table)
+    normalized = normalized.replace("<br>", "<br/>")
+    normalized = re.sub(r">\s+<", "><", normalized)
+    return normalized.strip()
+
+# =========================
+# 4) Data loading and checks
+# =========================
+def read_jsonl(path: str, max_samples: int = None) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rows.append(json.loads(line))
+    if max_samples is not None:
+        rows = rows[:max_samples]
+    return rows
+
+
+def validate_and_prepare(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    cleaned = []
+    for i, row in enumerate(rows):
+        sample_id = row.get("id", f"sample_{i:04d}")
+        doc_id = row.get("doc_id", sample_id)
+        image_path = row.get("image")
+        html = row.get("html")
+
+        if not image_path or not os.path.exists(image_path):
+            raise FileNotFoundError(f"Missing image for {sample_id}: {image_path}")
+        if not html:
+            raise ValueError(f"Missing html label for {sample_id}")
+
+        # Verify image opens.
+        with Image.open(image_path) as img:
+            img.verify()
+
+        html = normalize_html(html)
+
+        cleaned.append(
+            {
+                "id": sample_id,
+                "doc_id": doc_id,
+                "image": image_path,
+                "html": html,
+                "notes": row.get("notes", ""),
+            }
+        )
+    return cleaned
+
+rows = read_jsonl(DATA_JSONL, max_samples=MAX_SAMPLES)
+rows = validate_and_prepare(rows)
+print(f"Loaded {len(rows)} samples")
+
+# =========================
+# 5) Grouped split by document
+# =========================
+def grouped_split(rows: List[Dict[str, Any]], seed: int = 42):
+    ids = list(range(len(rows)))
+    groups = [r["doc_id"] for r in rows]
+
+    # 80/10/10 split. For tiny data, keep it simple and grouped.
+    gss1 = GroupShuffleSplit(n_splits=1, train_size=0.8, random_state=seed)
+    train_idx, temp_idx = next(gss1.split(ids, groups=groups))
+
+    temp_rows = [rows[i] for i in temp_idx]
+    temp_ids = list(range(len(temp_rows)))
+    temp_groups = [r["doc_id"] for r in temp_rows]
+
+    gss2 = GroupShuffleSplit(n_splits=1, train_size=0.5, random_state=seed + 1)
+    val_subidx, test_subidx = next(gss2.split(temp_ids, groups=temp_groups))
+
+    train_rows = [rows[i] for i in train_idx]
+    val_rows = [temp_rows[i] for i in val_subidx]
+    test_rows = [temp_rows[i] for i in test_subidx]
+    return train_rows, val_rows, test_rows
+
+train_rows, val_rows, test_rows = grouped_split(rows, seed=SEED)
+print(f"Train: {len(train_rows)} | Val: {len(val_rows)} | Test: {len(test_rows)}")
+print("Train doc_ids:", sorted({r['doc_id'] for r in train_rows})[:10])
+
+# =========================
+# 6) Convert to VLM chat format
+# =========================
+def make_messages(sample: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "images": [sample["image"]],
+        "messages": [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": SYSTEM_PROMPT}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": sample["image"]},
+                    {"type": "text", "text": USER_PROMPT},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": sample["html"]}],
+            },
+        ],
+        "id": sample["id"],
+        "doc_id": sample["doc_id"],
+        "label_html": sample["html"],
+        "notes": sample.get("notes", ""),
+    }
+
+train_dataset = Dataset.from_list([make_messages(x) for x in train_rows])
+val_dataset = Dataset.from_list([make_messages(x) for x in val_rows])
+test_dataset = Dataset.from_list([make_messages(x) for x in test_rows])
+
+dataset = DatasetDict({
+    "train": train_dataset,
+    "validation": val_dataset,
+    "test": test_dataset,
+})
+
+print(dataset)
+print(dataset["train"][0].keys())
+
+# =========================
+# 7) Quick baseline generation helper
+# =========================
+processor = AutoProcessor.from_pretrained(PROCESSOR_ID)
+
+
+def generate_text_from_sample(model, processor, sample, max_new_tokens=1024, device="cuda"):
+    # Remove assistant turn for generation.
+    inference_messages = sample["messages"][:2]
+    text_input = processor.apply_chat_template(
+        inference_messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    image_inputs, video_inputs = process_vision_info(inference_messages)
+    inputs = processor(
+        text=[text_input],
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt",
+    )
+    inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+
+    with torch.inference_mode():
+        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+
+    trimmed_ids = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs["input_ids"], generated_ids)]
+    output = processor.batch_decode(
+        trimmed_ids,
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False,
+    )[0]
+    return output
+
+# =========================
+# 8) Quantized model for training
+# =========================
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16 if USE_BF16 else torch.float16,
+)
+
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    MODEL_ID,
+    torch_dtype=torch.bfloat16 if USE_BF16 else torch.float16,
+    device_map="auto",
+    quantization_config=bnb_config,
+)
+
+peft_config = LoraConfig(
+    r=PEFT_R,
+    lora_alpha=PEFT_ALPHA,
+    lora_dropout=PEFT_DROPOUT,
+    bias="none",
+    target_modules=TARGET_MODULES,
+    task_type="CAUSAL_LM",
+)
+
+# =========================
+# 9) Baseline sanity check before training
+# =========================
+print("\nBaseline check on one training example:\n")
+try:
+    baseline_pred = generate_text_from_sample(model, processor, dataset["train"][0])
+    print("PREDICTION:")
+    print(textwrap.shorten(baseline_pred, width=1200, placeholder=" ..."))
+    print("\nLABEL:")
+    print(textwrap.shorten(dataset["train"][0]["label_html"], width=1200, placeholder=" ..."))
+except Exception as e:
+    print(f"Baseline generation failed: {e}")
+
+# =========================
+# 10) Training config
+# =========================
+training_args = SFTConfig(
+    output_dir=OUTPUT_DIR,
+    num_train_epochs=NUM_EPOCHS,
+    per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
+    per_device_eval_batch_size=PER_DEVICE_EVAL_BATCH_SIZE,
+    gradient_accumulation_steps=GRAD_ACCUM,
+    gradient_checkpointing=True,
+    gradient_checkpointing_kwargs={"use_reentrant": False},
+    learning_rate=LEARNING_RATE,
+    logging_steps=LOGGING_STEPS,
+    eval_steps=EVAL_STEPS,
+    save_steps=SAVE_STEPS,
+    eval_strategy="steps",
+    save_strategy="steps",
+    bf16=USE_BF16,
+    fp16=not USE_BF16,
+    warmup_ratio=0.05,
+    max_grad_norm=0.3,
+    lr_scheduler_type="cosine",
+    optim="paged_adamw_8bit",
+    remove_unused_columns=False,
+    dataset_text_field="",
+    max_length=2048,
+    report_to="none",
+)
+
+trainer = SFTTrainer(
+    model=model,
+    args=training_args,
+    train_dataset=dataset["train"],
+    eval_dataset=dataset["validation"],
+    peft_config=peft_config,
+    processing_class=processor,
+)
+
+# =========================
+# 11) Train
+# =========================
+train_result = trainer.train()
+print(train_result)
+trainer.save_model(OUTPUT_DIR)
+processor.save_pretrained(OUTPUT_DIR)
+
+# =========================
+# 12) Reload base model + adapter for eval
+# =========================
+# You can keep the existing model loaded, but reloading makes the eval path clearer.
+
+del trainer
+torch.cuda.empty_cache()
+
+base_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    MODEL_ID,
+    torch_dtype=torch.bfloat16 if USE_BF16 else torch.float16,
+    device_map="auto",
+)
+base_model.load_adapter(OUTPUT_DIR)
+
+# =========================
+# 13) Tiny evaluation loop
+# =========================
+def structural_score(pred_html: str, gold_html: str) -> Dict[str, Any]:
+    """
+    Cheap structural checks. This is NOT a full metric, but enough for the first pass.
+    """
+    pred = normalize_html(pred_html)
+    gold = normalize_html(gold_html)
+
+    def count(pattern: str, text: str) -> int:
+        return len(re.findall(pattern, text, flags=re.IGNORECASE))
+
+    return {
+        "exact_match": int(pred == gold),
+        "pred_tr": count(r"<tr\b", pred),
+        "gold_tr": count(r"<tr\b", gold),
+        "pred_td_th": count(r"<(td|th)\b", pred),
+        "gold_td_th": count(r"<(td|th)\b", gold),
+        "pred_rowspan": count(r"rowspan=", pred),
+        "gold_rowspan": count(r"rowspan=", gold),
+        "pred_colspan": count(r"colspan=", pred),
+        "gold_colspan": count(r"colspan=", gold),
+    }
+
+
+results = []
+for sample in dataset["test"]:
+    try:
+        pred = generate_text_from_sample(base_model, processor, sample, max_new_tokens=1536)
+        metrics = structural_score(pred, sample["label_html"])
+        results.append({
+            "id": sample["id"],
+            "doc_id": sample["doc_id"],
+            **metrics,
+            "pred_html": pred,
+            "gold_html": sample["label_html"],
+        })
+    except Exception as e:
+        results.append({
+            "id": sample["id"],
+            "doc_id": sample["doc_id"],
+            "error": str(e),
+        })
+
+print("\nTest results summary:\n")
+valid = [r for r in results if "error" not in r]
+if valid:
+    exact = sum(r["exact_match"] for r in valid) / len(valid)
+    print(f"Exact match: {exact:.3f} over {len(valid)} valid test samples")
+    bad = [r for r in valid if r["exact_match"] == 0]
+    print(f"Non-exact predictions: {len(bad)}")
+else:
+    print("No valid predictions.")
+
+# Save detailed results for manual review.
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+with open(os.path.join(OUTPUT_DIR, "test_predictions.jsonl"), "w", encoding="utf-8") as f:
+    for row in results:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+print(f"Saved adapter and predictions to {OUTPUT_DIR}")
+
+# =========================
+# 14) What to tweak next
+# =========================
+# - If the adapter is too weak: expand TARGET_MODULES to ["q_proj", "k_proj", "v_proj", "o_proj"]
+# - If HTML structure is good but text is off: add more examples with tiny fonts / footnotes.
+# - If model invents rows/cells: shorten prompt and remove optional wording.
+# - If VRAM is tight: reduce max_length or use fewer/lower-res images.
+# - If crops miss context: add title row/caption into the image crop, not a longer prompt.
+
