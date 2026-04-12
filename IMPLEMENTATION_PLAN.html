@@ -322,6 +322,7 @@
         <li>`run_001`: Drive path was missing, so training never started.</li>
         <li>`run_002`: no-Drive mode surfaced two notebook issues: package upgrades forced a restart condition, and GitHub clone failed with exit code <code>128</code>.</li>
         <li>`run_003`: GPU runtime was healthy on Colab, but HTTPS git bootstrap still failed against GitHub auth.</li>
+        <li>`run_004`: bootstrap, mock data generation, and model load all worked; the next failure moved into the VLM collator because the sample format likely duplicated image handling.</li>
         <li>The notebook now includes an early CUDA check and uses archive download instead of relying on `git clone` prompts in Colab.</li>
       </ul>
     </section>

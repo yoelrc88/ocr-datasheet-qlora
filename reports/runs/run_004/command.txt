@@ -1,0 +1,1 @@
+python /content/finetune-test/scripts/train_table_html_lora.py --data-jsonl /content/finetune-test/mock_smoke_test/mock_table_html.jsonl --output-dir /content/artifacts/run_001 --max-samples 0 --epochs 1 --batch-size 1 --grad-accum 8 --learning-rate 0.0001

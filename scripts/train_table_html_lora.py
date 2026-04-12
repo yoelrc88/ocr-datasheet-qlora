@@ -151,7 +151,6 @@ def to_conversation(sample: dict) -> dict:
                 "content": [{"type": "text", "text": sample["html"]}],
             },
         ],
-        "images": [sample["image"]],
         "id": sample["id"],
         "doc_id": sample["doc_id"],
         "label_html": sample["html"],

@@ -1,0 +1,17 @@
+[setup]
+Downloaded repo into /content/ocr-datasheet-qlora
+mock dataset generated successfully
+
+[runtime]
+- torch version: 2.10.0+cu128
+- cuda available: True
+- torch cuda: 12.8
+
+[training]
+Loaded 2 total samples
+Train=1 Validation=1 Test=0
+
+[failure]
+IndexError: index 1 is out of bounds for dimension 0 with size 1
+Location: transformers/models/qwen2_5_vl/processing_qwen2_5_vl.py
+Context: image token counting during the first collated batch

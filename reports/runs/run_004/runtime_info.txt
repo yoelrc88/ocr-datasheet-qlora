@@ -1,0 +1,14 @@
+platform=Google Colab runtime
+run_name=run_004
+gpu=H100
+use_drive=False
+use_mock_data=True
+
+Observed notebook outputs:
+- repo archive download succeeded
+- mock dataset path resolved to /content/ocr-datasheet-qlora/mock_smoke_test/mock_table_html.jsonl
+- torch version: 2.10.0+cu128
+- cuda available: True
+- torch cuda: 12.8
+- train split contained 1 sample and validation split contained 1 sample
+- first training batch failed in Qwen VLM processor with image token indexing error
