@@ -1,0 +1,1 @@
+python /content/finetune-test/scripts/train_table_html_lora.py --data-jsonl /content/finetune-test/examples/table_html_dataset.example.jsonl --output-dir /content/olmocr_table_html_lora --max-samples 0 --epochs 1 --batch-size 1 --grad-accum 8 --learning-rate 1e-4

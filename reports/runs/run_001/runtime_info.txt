@@ -1,0 +1,11 @@
+platform=Google Colab runtime
+python=unknown from committed notebook
+run_name=run_001
+gpu=T4
+
+Observed notebook outputs:
+- PROJECT_DIR exists: False
+- DATA_JSONL exists: False
+- Train script exists: False
+- cp: cannot stat '/content/drive/MyDrive/finetune-test': No such file or directory
+- python3: can't open file '/content/finetune-test/scripts/train_table_html_lora.py': [Errno 2] No such file or directory

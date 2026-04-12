@@ -170,6 +170,12 @@ def build_dataset(rows: list[dict], train_size: float, seed: int) -> DatasetDict
     )
 
 
+def write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, ensure_ascii=False)
+
+
 def main() -> None:
     args = parse_args()
 
@@ -181,6 +187,47 @@ def main() -> None:
     rows = load_rows(Path(args.data_jsonl), args.max_samples)
     rows = validate_rows(rows)
     dataset = build_dataset(rows, train_size=args.train_size, seed=args.seed)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    write_json(
+        output_dir / "run_config.json",
+        {
+            "data_jsonl": args.data_jsonl,
+            "output_dir": args.output_dir,
+            "model_id": args.model_id,
+            "processor_id": args.processor_id,
+            "max_samples": args.max_samples,
+            "train_size": args.train_size,
+            "seed": args.seed,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "grad_accum": args.grad_accum,
+            "learning_rate": args.learning_rate,
+            "logging_steps": args.logging_steps,
+            "eval_steps": args.eval_steps,
+            "save_steps": args.save_steps,
+            "lora_r": args.lora_r,
+            "lora_alpha": args.lora_alpha,
+            "lora_dropout": args.lora_dropout,
+            "target_modules": args.target_modules,
+            "max_length": None if args.max_length == 0 else args.max_length,
+        },
+    )
+
+    write_json(
+        output_dir / "dataset_split_summary.json",
+        {
+            "total_samples": len(rows),
+            "train_samples": len(dataset["train"]),
+            "validation_samples": len(dataset["validation"]),
+            "test_samples": len(dataset["test"]),
+            "train_doc_ids": sorted({row["doc_id"] for row in dataset["train"]}),
+            "validation_doc_ids": sorted({row["doc_id"] for row in dataset["validation"]}),
+            "test_doc_ids": sorted({row["doc_id"] for row in dataset["test"]}),
+        },
+    )
 
     print(f"Loaded {len(rows)} total samples")
     print(
