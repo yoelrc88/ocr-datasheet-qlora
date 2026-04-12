@@ -142,7 +142,7 @@ def to_conversation(sample: dict) -> dict:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": sample["image"]},
+                    {"type": "image"},
                     {"type": "text", "text": USER_PROMPT},
                 ],
             },
@@ -151,6 +151,7 @@ def to_conversation(sample: dict) -> dict:
                 "content": [{"type": "text", "text": sample["html"]}],
             },
         ],
+        "image": sample["image"],
         "id": sample["id"],
         "doc_id": sample["doc_id"],
         "label_html": sample["html"],

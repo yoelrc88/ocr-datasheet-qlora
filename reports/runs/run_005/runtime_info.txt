@@ -1,0 +1,12 @@
+platform=Google Colab runtime
+run_name=run_005
+gpu=RTX PRO 6000 / G4
+use_drive=False
+use_mock_data=True
+
+Observed notebook outputs:
+- repo archive download succeeded
+- mock dataset generation succeeded
+- GPU runtime healthy
+- failure moved into TRL dataset tokenization/preparation
+- error reported zero provided images for one placeholder

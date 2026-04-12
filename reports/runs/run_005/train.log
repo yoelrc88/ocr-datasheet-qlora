@@ -1,0 +1,17 @@
+[setup]
+repo bootstrap succeeded via GitHub archive download
+mock dataset generated successfully
+
+[runtime]
+- torch version: 2.10.0+cu128
+- cuda available: True
+- torch cuda: 12.8
+
+[training]
+Loaded 2 total samples
+Train=1 Validation=1 Test=0
+
+[failure]
+ValueError: Number of images provided (0) does not match number of image placeholders (1).
+Location: trl/data_utils.py -> prepare_multimodal_messages
+Interpretation: sample format is missing the expected top-level image column for the placeholder
