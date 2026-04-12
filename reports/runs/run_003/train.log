@@ -1,0 +1,12 @@
+[setup]
+Dependency install succeeded for the required smoke-test packages.
+
+[runtime]
+- torch version: 2.10.0+cu128
+- cuda available: True
+- torch cuda: 12.8
+
+[failure]
+RuntimeError: Git clone failed. If the repo is private, set GITHUB_TOKEN or switch to USE_DRIVE=True.
+STDERR: Cloning into '/content/ocr-datasheet-qlora'...
+fatal: could not read Username for 'https://github.com': No such device or address

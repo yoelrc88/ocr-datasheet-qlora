@@ -1,0 +1,12 @@
+platform=Google Colab runtime
+run_name=run_003
+gpu=A100
+use_drive=False
+use_mock_data=True
+
+Observed notebook outputs:
+- torch version: 2.10.0+cu128
+- cuda available: True
+- torch cuda: 12.8
+- repo bootstrap failed before mock data generation
+- error: fatal: could not read Username for 'https://github.com'
