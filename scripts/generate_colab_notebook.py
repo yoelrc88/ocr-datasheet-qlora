@@ -188,7 +188,7 @@ def build_notebook() -> dict:
         md_cell("## 7. Run the smoke-test training job and capture the log"),
         code_cell(
             "train_cmd = [\n"
-            "    'python',\n"
+            "    'python', '-u',\n"
             "    f'{LOCAL_PROJECT_DIR}/scripts/train_table_html_lora.py',\n"
             "    '--data-jsonl', LOCAL_DATA_JSONL,\n"
             "    '--output-dir', ARTIFACT_DIR,\n"
