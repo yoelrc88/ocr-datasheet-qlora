@@ -30,13 +30,11 @@ def build_notebook() -> dict:
     cells = [
         md_cell(
             "# olmOCR Table HTML Fine-Tuning on Colab\n\n"
-            "This notebook is set up for a GitHub-based feedback loop:\n\n"
-            "1. Run a smoke test in Colab\n"
-            "2. Save only lightweight run reports into the repo under `reports/runs/`\n"
-            "3. Commit and push those report files to GitHub\n"
-            "4. I can review the run directly from GitHub\n\n"
+            "This notebook is set up for a GitHub-based feedback loop.\n\n"
+            "Important workflow note: if you only save the notebook from Colab, only the executed `.ipynb` is guaranteed to reach GitHub. Files created inside the runtime such as `reports/runs/...` do not appear on GitHub unless you also commit and push them manually.\n\n"
+            "Because of that, this notebook prints the important run-report contents directly into notebook output as well.\n\n"
             "Heavy artifacts like checkpoints should stay outside git.\n\n"
-            "Google Drive is optional. For cheap smoke tests, the notebook can clone the repo from GitHub and generate mock data directly inside Colab.\n\n"
+            "Google Drive is optional. For the next real experiment path, this notebook can clone the repo from GitHub and generate synthetic merged-table data directly inside Colab.\n\n"
             "At the beginning of each run, keep a note about:\n\n"
             "- where you are running it\n"
             "- what the latest run is\n"
@@ -72,10 +70,12 @@ def build_notebook() -> dict:
             "        'make sure GPU is enabled, and rerun from the top.'\n"
             "    )"
         ),
-        md_cell("## 3. Configure workflow mode\n\nUse `USE_DRIVE = False` for the cheapest smoke test path. That mode clones the repo from GitHub and can generate mock data directly in Colab."),
+        md_cell("## 3. Configure workflow mode\n\nDefault next step is `synthetic` data. Use `mock` only for plumbing checks."),
         code_cell(
             "USE_DRIVE = False\n"
-            "USE_MOCK_DATA = True\n"
+            "DATA_MODE = 'synthetic'  # mock | synthetic | real_example\n"
+            "SYNTHETIC_COUNT = 150\n"
+            "SYNTHETIC_SEED = 42\n"
             "REPO_OWNER = 'yoelrc88'\n"
             "REPO_NAME = 'ocr-datasheet-qlora'\n"
             "REPO_REF = 'main'\n"
@@ -99,7 +99,7 @@ def build_notebook() -> dict:
             "else:\n"
             "    print('Skipping Drive mount; using GitHub/local mode.')"
         ),
-        md_cell("## 5. Prepare the repo and dataset source\n\nIf the repo is private, set `GITHUB_TOKEN` above or use Drive mode. This step now downloads a GitHub archive instead of relying on interactive git auth inside Colab."),
+        md_cell("## 5. Prepare the repo and dataset source\n\nThis step downloads a GitHub archive into Colab. That is fine for running experiments, but it is not a real git checkout. If you only save the notebook, the notebook output is what will show up on GitHub, not the generated report files."),
         code_cell(
             "import io\n"
             "import os\n"
@@ -149,9 +149,19 @@ def build_notebook() -> dict:
             "if not USE_DRIVE:\n"
             "    download_repo_archive(REPO_OWNER, REPO_NAME, REPO_REF, GITHUB_TOKEN, GITHUB_PROJECT_DIR)\n"
             "    print(f'Downloaded repo into {GITHUB_PROJECT_DIR}')\n\n"
-            "if USE_MOCK_DATA:\n"
+            "if DATA_MODE == 'mock':\n"
             "    subprocess.run(['python', f'{PROJECT_DIR}/scripts/generate_mock_smoke_test_data.py'], check=True)\n"
             "    DATA_JSONL = f'{PROJECT_DIR}/mock_smoke_test/mock_table_html.jsonl'\n"
+            "elif DATA_MODE == 'synthetic':\n"
+            "    synthetic_dir = f'{PROJECT_DIR}/synthetic_merged_tables'\n"
+            "    subprocess.run([\n"
+            "        'python',\n"
+            "        f'{PROJECT_DIR}/scripts/generate_synthetic_merged_table_data.py',\n"
+            "        '--output-dir', synthetic_dir,\n"
+            "        '--count', str(SYNTHETIC_COUNT),\n"
+            "        '--seed', str(SYNTHETIC_SEED),\n"
+            "    ], check=True)\n"
+            "    DATA_JSONL = f'{synthetic_dir}/synthetic_table_html.jsonl'\n"
             "else:\n"
             "    DATA_JSONL = f'{PROJECT_DIR}/examples/table_html_dataset.example.jsonl'\n\n"
             "REPORTS_DIR = f'{PROJECT_DIR}/reports/runs'\n"
@@ -163,7 +173,9 @@ def build_notebook() -> dict:
             "    f'platform={platform.platform()}',\n"
             "    f'python={platform.python_version()}',\n"
             "    f'use_drive={USE_DRIVE}',\n"
-            "    f'use_mock_data={USE_MOCK_DATA}',\n"
+            "    f'data_mode={DATA_MODE}',\n"
+            "    f'synthetic_count={SYNTHETIC_COUNT}',\n"
+            "    f'synthetic_seed={SYNTHETIC_SEED}',\n"
             "    f'project_dir={PROJECT_DIR}',\n"
             "    f'data_jsonl={DATA_JSONL}',\n"
             "    f'run_name={RUN_NAME}',\n"
@@ -185,7 +197,7 @@ def build_notebook() -> dict:
             "print('LOCAL_PROJECT_DIR =', LOCAL_PROJECT_DIR)\n"
             "print('LOCAL_DATA_JSONL =', LOCAL_DATA_JSONL)"
         ),
-        md_cell("## 7. Run the smoke-test training job and capture the log"),
+        md_cell("## 7. Run the training job and capture the log"),
         code_cell(
             "train_cmd = [\n"
             "    'python', '-u',\n"
@@ -269,20 +281,32 @@ def build_notebook() -> dict:
             "print('Artifact manifest:')\n"
             "print(Path(f'{REPORT_DIR}/artifact_manifest.txt').read_text(encoding='utf-8'))"
         ),
-        md_cell("## 9. Review the report files that should be committed"),
+        md_cell("## 9. Review the report files that were written inside Colab"),
         code_cell("!ls -la \"$REPORT_DIR\""),
+        md_cell("## 10. Print The Run Report Into Notebook Output\n\nThis is the important part for your workflow. If you only save the notebook, these printed summaries are what will be visible on GitHub even if you never commit the generated `reports/runs/...` files from inside Colab."),
+        code_cell(
+            "from pathlib import Path\n\n"
+            "for name in ['runtime_info.txt', 'run_config.json', 'dataset_split_summary.json', 'artifact_manifest.txt', 'train.log']:\n"
+            "    path = Path(REPORT_DIR) / name\n"
+            "    if path.exists():\n"
+            "        print(f'===== {name} =====')\n"
+            "        text = path.read_text(encoding='utf-8')\n"
+            "        if name == 'train.log' and len(text) > 12000:\n"
+            "            text = text[-12000:]\n"
+            "        print(text)\n"
+            "        print()"
+        ),
         md_cell(
-            "## 10. GitHub handoff\n\n"
+            "## 11. GitHub handoff\n\n"
             "After the run:\n\n"
-            "1. Update `notes.md` in the run folder with the latest status and a short comparison to past runs\n"
-            "2. If you changed the experiment strategy, update `reports/EXPERIMENT_MATRIX.md`\n"
-            "3. Commit only the new folder under `reports/runs/` and any small tracking-doc updates\n"
-            "4. Push it to GitHub\n"
-            "5. Send me the repo link or tell me the run folder name\n\n"
+            "1. If you are only saving the notebook, the printed report section above is enough for me to inspect the run from GitHub\n"
+            "2. If you also want the structured report files on GitHub, commit and push the `reports/runs/<run_name>/` folder manually from a real git checkout\n"
+            "3. Send me the repo link or tell me the run name\n\n"
             "That gives me a stable place to review the run without SSH or notebook access."
         ),
         code_cell(
             "print('Suggested git commands:')\n"
+            "print(f'cd {PROJECT_DIR}')\n"
             "print(f'git add reports/runs/{RUN_NAME}')\n"
             "print('git commit -m \"add results for ' + RUN_NAME + '\"')\n"
             "print('git push')"

@@ -239,6 +239,7 @@
         <li>lightweight reports into Drive under <code>reports/runs/&lt;run_name&gt;</code></li>
       </ul>
       <p class="muted">That split is intentional: local disk is faster for training, Drive is used for durable small files that are safe to push back to GitHub.</p>
+      <p class="muted">If you are not using Drive and are only saving the executed notebook back to GitHub, remember that files created inside the Colab runtime are not automatically committed. The notebook now prints the run-report contents so notebook-only saves are still reviewable.</p>
     </section>
 
     <section class="section">
@@ -277,9 +278,10 @@
       <h3>Cheapest Colab Path</h3>
       <ul>
         <li>set <code>USE_DRIVE = False</code></li>
-        <li>set <code>USE_MOCK_DATA = True</code></li>
-        <li>let the notebook clone the repo from GitHub</li>
-        <li>let the notebook generate mock data locally in Colab</li>
+        <li>set <code>DATA_MODE = 'mock'</code> for a plumbing-only check</li>
+        <li>or set <code>DATA_MODE = 'synthetic'</code> for the next real experiment path</li>
+        <li>let the notebook download the repo from GitHub</li>
+        <li>let the notebook generate the chosen dataset locally in Colab</li>
       </ul>
       <p class="muted">If the repo is private, GitHub clone mode needs a token or a switch back to <code>USE_DRIVE = True</code>.</p>
       <h3>What Counts As Success</h3>
@@ -311,6 +313,7 @@
         <li>outputs paired PNG images and gold <code>HTML</code> labels</li>
         <li>randomizes widths, heights, text content, and merged-cell patterns</li>
         <li>intended to run in Colab, not to commit generated images into git</li>
+        <li>default next-step notebook mode: <code>DATA_MODE = 'synthetic'</code> with about <code>150</code> generated samples</li>
       </ul>
       <h3>Important Limitation</h3>
       <p>Synthetic tables can teach structure, but they will not fully cover real datasheet rendering artifacts by themselves. The strongest setup is usually synthetic data for structure coverage plus a smaller set of real cropped tables for realism.</p>
