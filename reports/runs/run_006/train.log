@@ -1,0 +1,16 @@
+[setup]
+repo bootstrap succeeded via GitHub archive download
+mock dataset generated successfully
+
+[runtime]
+- processor loaded
+- quantized model loaded
+- trainer initialized
+- training started
+
+[failure]
+NotImplementedError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'BFloat16'
+Context: first train step during AMP unscale / gradient clipping
+
+[interpretation]
+The smoke test has moved past bootstrap, dataset formatting, and trainer construction. The next fix is to force FP16 instead of BF16 for this script.
