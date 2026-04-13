@@ -237,19 +237,23 @@ def main() -> None:
     supports_bf16 = torch.cuda.get_device_capability(0)[0] >= 8
     dtype = torch.bfloat16 if supports_bf16 else torch.float16
 
+    print("Loading processor...", flush=True)
     processor = AutoProcessor.from_pretrained(args.processor_id)
+    print("Processor loaded", flush=True)
     quant_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_use_double_quant=True,
         bnb_4bit_quant_type="nf4",
         bnb_4bit_compute_dtype=dtype,
     )
+    print("Loading quantized model...", flush=True)
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         args.model_id,
         torch_dtype=dtype,
         device_map="auto",
         quantization_config=quant_config,
     )
+    print("Model loaded", flush=True)
 
     peft_config = LoraConfig(
         r=args.lora_r,
@@ -285,6 +289,7 @@ def main() -> None:
         max_length=None if args.max_length == 0 else args.max_length,
     )
 
+    print("Initializing trainer...", flush=True)
     trainer = SFTTrainer(
         model=model,
         args=training_args,
@@ -294,10 +299,13 @@ def main() -> None:
         processing_class=processor,
     )
 
+    print("Starting training...", flush=True)
     train_result = trainer.train()
     print(train_result)
+    print("Saving model and processor...", flush=True)
     trainer.save_model(args.output_dir)
     processor.save_pretrained(args.output_dir)
+    print("Done", flush=True)
 
 
 if __name__ == "__main__":
