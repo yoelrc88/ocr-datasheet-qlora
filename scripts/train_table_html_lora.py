@@ -234,9 +234,11 @@ def main() -> None:
         f"Train={len(dataset['train'])} Validation={len(dataset['validation'])} Test={len(dataset['test'])}"
     )
 
-    supports_bf16 = torch.cuda.get_device_capability(0)[0] >= 8
-    dtype = torch.bfloat16 if supports_bf16 else torch.float16
-    print(f"Using {'bf16' if supports_bf16 else 'fp16'} precision mode", flush=True)
+    # Keep model compute in fp16 for the smoke test and disable Trainer mixed
+    # precision so we avoid the AMP/GradScaler unscale path that is still
+    # crashing on Colab in this environment.
+    dtype = torch.float16
+    print("Using fp16 model compute with trainer mixed precision disabled", flush=True)
 
     print("Loading processor...", flush=True)
     processor = AutoProcessor.from_pretrained(args.processor_id)
@@ -279,8 +281,8 @@ def main() -> None:
         save_steps=args.save_steps,
         eval_strategy="steps",
         save_strategy="steps",
-        bf16=supports_bf16,
-        fp16=not supports_bf16,
+        bf16=False,
+        fp16=False,
         warmup_ratio=0.05,
         max_grad_norm=0.3,
         lr_scheduler_type="cosine",

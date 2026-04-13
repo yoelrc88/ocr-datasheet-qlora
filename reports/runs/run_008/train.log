@@ -1,0 +1,16 @@
+[setup]
+repo bootstrap succeeded via GitHub archive download
+mock dataset generated successfully
+
+[runtime]
+- BF16 precision mode selected on a modern GPU
+- processor loaded
+- quantized model loaded
+- trainer initialized
+- training started
+
+[failure]
+NotImplementedError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'BFloat16'
+
+[interpretation]
+The Trainer mixed-precision AMP path is still incompatible with this environment. The next smoke-test change should disable Trainer AMP while keeping quantized model compute in fp16.
