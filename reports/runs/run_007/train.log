@@ -1,0 +1,14 @@
+[setup]
+repo bootstrap succeeded via GitHub archive download
+mock dataset generated successfully
+
+[runtime]
+- BF16-capable GPU was available
+- model load and trainer init succeeded
+- training started
+
+[failure]
+NotImplementedError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'BFloat16'
+
+[interpretation]
+The script forced FP16 globally, but the actual training path on this GPU still encountered BF16 gradients. The next fix is to make precision selection match GPU capability: BF16 on modern GPUs, FP16 on older ones.

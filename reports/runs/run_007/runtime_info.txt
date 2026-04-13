@@ -1,0 +1,12 @@
+platform=Google Colab runtime
+run_name=run_007
+gpu=RTX PRO 6000 Blackwell / G4
+use_drive=False
+use_mock_data=True
+
+Observed notebook outputs:
+- repo archive bootstrap succeeded
+- mock dataset generation succeeded
+- processor and model load succeeded
+- failure occurred after `Starting training...`
+- previous forced-FP16 workaround is not appropriate on this BF16-capable GPU

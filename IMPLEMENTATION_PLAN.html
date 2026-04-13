@@ -325,6 +325,7 @@
         <li>`run_004`: bootstrap, mock data generation, and model load all worked; the next failure moved into the VLM collator because the sample format likely duplicated image handling.</li>
         <li>`run_005`: the duplicate-image issue was replaced by a cleaner TRL contract error: the image placeholder exists, but the sample still needs a top-level <code>image</code> column.</li>
         <li>`run_006`: the smoke test reached the first train step, then failed in AMP with a BF16 unscale error. The next run should force FP16.</li>
+        <li>`run_007`: forcing FP16 on a BF16-capable GPU did not resolve the issue cleanly. The next script version should choose BF16 on capability `&gt;= 8` and FP16 otherwise.</li>
         <li>The notebook now includes an early CUDA check and uses archive download instead of relying on `git clone` prompts in Colab.</li>
       </ul>
     </section>
